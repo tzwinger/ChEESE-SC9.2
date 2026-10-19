@@ -1,0 +1,49 @@
+! ---------------------------------------------------------------------------
+! Linear solver + preconditioner for the StressSolver (Solver 5):
+! 2-BLOCK SCHUR preconditioner for the [Disp:3 Pressure:1] incompressible
+! Maxwell saddle-point.
+!   block 1 = displacement {Disp1,Disp2,Disp3}   (elliptic, vector)
+!   block 2 = pressure, preconditioned by StressSolve's NATIVE Schur matrix
+!             "elast schur" (the pressure mass matrix, built automatically when
+!             Incompressible + Block Preconditioner are on).
+! The 4-component split in BPC_4.sif diverged because it preconditioned the
+! pressure with its own ~singular diagonal block instead of the Schur matrix.
+! Included INSIDE Solver 5 -- holds ONLY Linear System / preconditioning keywords.
+!
+! NB: StressSolve + Incompressible + Block Preconditioner is an UN-EXERCISED path
+!     in Elmer (the source notes no test combines them), so the Schur multiplier
+!     and block tolerances below may need tuning; MUMPS direct is the robust
+!     fallback. Switch the toggle in the main SIF to ILU3_GCR.sif to go back.
+! ---------------------------------------------------------------------------
+  Linear System Solver        = "Block"
+  Block Gauss-Seidel          = Logical True
+  Block Preconditioner        = Logical True
+  Block Matrix Schur Variable = String "elast schur"   ! native pressure-mass Schur
+  Block Structure(4)          = Integer 1 1 1 2         ! block1 = Disp1/2/3, block2 = Pressure
+  Block Scaling               = Logical True
+  ! Schur matrix multiplier = Real 1.0                 ! ~1/(2*shear modulus); tune if block 2 is slow
+
+  ! outer Krylov over the Schur-preconditioned operator (expect TENS of iters)
+  Outer: Linear System Solver              = "Iterative"
+  Outer: Linear System Iterative Method    = "GCR"
+  Outer: Linear System GCR Restart         = 100
+  Outer: Linear System Max Iterations      = 500
+  Outer: Linear System Convergence Tolerance = 1.0E-05
+  Outer: Linear System Abort Not Converged = False
+  Outer: Linear System Residual Output     = 1
+
+  $blocktol = 0.001
+  ! block 1 -- displacement (elliptic vector): ILU; swap to hypre BoomerAMG for h-independence
+  block 11: Linear System Solver = "Iterative"
+  block 11: Linear System Iterative Method = "idrs"
+  block 11: Linear System Preconditioning = "ILU1"
+  block 11: Linear System Max Iterations = 500
+  block 11: Linear System Convergence Tolerance = $blocktol
+  block 11: Linear System Residual Output = 0
+  ! block 2 -- pressure: solved against the Schur (mass) matrix -- SPD, well-conditioned
+  block 22: Linear System Solver = "Iterative"
+  block 22: Linear System Iterative Method = "idrs"
+  block 22: Linear System Preconditioning = "ILU0"
+  block 22: Linear System Max Iterations = 500
+  block 22: Linear System Convergence Tolerance = $blocktol
+  block 22: Linear System Residual Output = 0

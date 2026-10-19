@@ -1,0 +1,12 @@
+! Default parameters for a single MANUAL run.
+! The sweep driver (runelmer_multiple.sh) ignores this file: it writes one flat
+! params_<tag>.sif per combination and points a generated run SIF at it.
+! NOTE: runresolution_<res> content is inlined here, NOT `include`d -- Elmer cannot
+! handle an include as the first line of an included file (nested include fails with
+! "Unknown input field in header section"). Keep this file flat.
+$res="coarse"
+$neLo=8
+$neUp=3
+$area   = 30      ! [m] iceberg attachment band (vertical extent)
+$idwpow = 2.0     ! cloud IDW exponent
+$nn     = 6       ! cloud nearest-neighbour count

@@ -1,0 +1,15 @@
+! ---------------------------------------------------------------------------
+! Linear solver + preconditioner for the StressSolver (Solver 5):
+! ORIGINAL monolithic GCR + ILU3 on the [Disp:3 Pressure:1] saddle-point.
+! Included INSIDE Solver 5 of Bowdoin_footprint_run_incmp_lumi.sif -- this file
+! holds ONLY the Linear System / preconditioning keywords; the solver header and
+! all physics stay in the main SIF. Baseline for BPC_4.sif.
+! ---------------------------------------------------------------------------
+  Linear System Solver = "Iterative"
+  Linear System Iterative Method =  "GCR"
+  Linear System GCR Restart = 500
+  Linear System Max Iterations = 10000
+  Linear System Convergence Tolerance = 1.0E-05
+  Linear System Abort Not Converged = False
+  Linear System Preconditioning = "ILU3"
+  Linear System Residual Output = 100

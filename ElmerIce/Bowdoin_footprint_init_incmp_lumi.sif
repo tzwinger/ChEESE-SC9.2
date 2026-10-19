@@ -1,0 +1,388 @@
+ !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Test for Weertman friction law            !!
+!!  optimise the Weertman friction coefficient!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!---LUA BEGIN
+! loadfile('Temperature.lua')()
+! loadfile('materials.lua')()
+!MinH=10.0
+!---LUA END
+! note viscosity.lua assumes SI units!
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! OPTIMISATION PARAMETERS
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Name of the RUN 
+
+include "params.sif"
+! $res="superfine" ! read in by the thing above
+$name="Bowdoin_v1_init_incmp"
+$directsolver="MUMPS"
+! TODO add shearband!
+
+!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! TEST PARAMETERS
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!### physical constants
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Header
+  Mesh DB "." "footprint_bc_$res$"
+  Results Directory "./VTU_footprint_$res$"
+End
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Simulation
+  Coordinate System  = Cartesian 3D
+  Simulation Type = "transient"
+
+  Steady State Min Iterations = 1
+  Steady State Max Iterations = 1
+
+  Timestepping Method = "bdf"
+  BDF Order = 2
+  Timestep Intervals = 10
+  Timestep Sizes = 60.0
+  
+  Post File =  "$name$.vtu"
+  Output File = "$name$.result"
+  OutPut Intervals = 10
+
+  !! restart True solution
+
+  Initialize Dirichlet Conditions = Logical False
+  
+  include "meshextrushion.sif"
+  
+  Preserve baseline = Logical True
+  
+  max output level = 5
+End
+
+Constants
+  Water Density = Real #rhow
+  Reference Coordinate(3) = Real 509870.0 8621580.0 0.0
+  ! z woud be 4.01708358e+01
+  Start Coordinate (3)= Real 509577.5 8621975.0 0.0
+  Stop Coordinate (3)= Real 509232.5 8622540.0 0.0
+  Minimum Distance = Real 495.0 !1495.0
+  Maximum Distance = Real 1145.0 !2145.0
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Bodies
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body 1
+  Name = "glacier"
+  Equation = 1
+  Body Force = 1
+  Material = 1
+  Initial Condition = 1
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Initial Conditions
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Initial Condition 1
+  Disp 1 = Real 0.0
+  Disp 2 = Real 0.0
+  Disp 3 = Real 0.0
+  BC Mask = Real 0.0
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!!  Body Forces
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Body Force 1
+  Stress Bodyforce 1 = 0.0
+  Stress Bodyforce 2 = 0.0
+  Stress Bodyforce 3 = #-gravity*rhoi
+  Cryostatic Pressure = Variable Depth
+    Real LUA "rhoi*gravity*tx[0]"
+  Ocean Pressure = Variable Coordinate 3
+    Real LUA "rhow*gravity*IfThenElse(tx[0] < 0.0, -1.0*tx[0], 0.0)" 
+  Temperature = Variable Depth
+         real lua "temperature(tx[0])"
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Materials
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Material 1
+ Density = Real #rhoi
+
+ Sea Level = Real 0.0
+ 
+ Viscosity Model = String "Glen"
+ Viscosity = Real 2.5 
+
+!---- Parametres for Glen Viscosity
+ Relative Temperature = Equals Temperature
+ Glen Exponent = Real 3.0
+ Glen Enhancement Factor = Real 1.0
+ Limit Temperature = Real -10.0e00
+ Rate Factor 1 = Real #A1
+ Activation Energy 1 = Real #Q1
+ Rate Factor 2 = Real #A2
+ Activation Energy 2 = Real #Q2
+ Critical Shear Rate = Real 1.0e-12
+
+! Elasticity
+ Youngs Modulus = #Eyoung
+ Poisson Ratio = #1.0/3.0
+ Damping = Real 0.0
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Solvers
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+!! Before simulation
+
+!%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Solver 1 ! Bedrock
+  Exec Solver = "Before Simulation"
+  Equation = String "NETCDFDataReader1"
+  Procedure = "GridDataReader" "GridDataReader"
+
+  !---- NOTE: File is case sensitive, String is not!
+  Filename = File "bowdoin_v1_geometry_filled.nc"
+  X Name = String "X"
+  Y Name = String "Y"
+
+  !--- Interpolation variables
+  X Epsilon = Real 1.0E-02
+  Y Epsilon = Real 1.0E-02
+
+  Interpolation Bias = Real 0.0
+  Interpolation Multiplier = Real 1.0
+
+  Is Time Counter = Logical True
+
+  Variable 1 = File "bedrock"
+  Target Variable 1 = String "zb"
+  Variable 2 = File "surface"
+  Target Variable 2 = String "thickness"
+  Variable 3 = File "uobs 1"
+  Target Variable 3 = String "uobs 1"
+  Variable 4 = File "uobs 2"
+  Target Variable 4 = String "uobs 2"
+
+  Enable Scaling = Logical False ! Scales the Elmer grid to match the NetCDF grid 
+
+  Bubbles in Global System = Logical False
+End
+
+Solver 2
+  Exec Solver = "before simulation"
+  Equation = "MapCoordinate"
+  Procedure = "StructuredMeshMapper" "StructuredMeshMapper"
+
+  Active Coordinate = Integer 3
+
+  Displacement Mode = Logical False
+  Correct Surface = Logical True
+  Minimum Height = Real #MinH
+
+  Correct Surface Mask = String "Glaciated"
+  Dot Product Tolerance = 1.0e-3
+
+  ! These are needed to host the variables that are read in
+  Variable = -nooutput "DummyMesh"
+End
+
+  ! Computes height and depth assuming an extruded mesh.
+Solver 3 
+  Equation = "HeightDepth"
+  Variable = -nooutput DummyR
+  Procedure = "StructuredProjectToPlane" "StructuredProjectToPlane"
+  Active Coordinate = Integer 3
+  Operator 1 = depth
+  Operator 2 = height
+  Exported Variable 1 = -dofs 1 "Cryostatic Pressure"
+  Exported Variable 2 = -dofs 1 "Ocean Pressure"
+  Update Exported Variables = True
+End
+
+Solver 4
+   Equation = "compute distance"
+   Exec Solver = "Before Simulation"
+   Procedure = "BIN/InterpolateByDistance.so" "InterpolateByDistance"
+   Variable = -dofs 1 "Dist"
+   ! iceberg between 495 and 1145 m
+   Exported Variable 1 = "In Contact"
+End
+
+Solver 5
+  Exec Solver = "Before Simulation"      ! run once before the steady solve              
+    Equation = "FrontField"                                                              
+    Procedure = "BIN/FrontFieldFromCloud" "FrontFieldFromCloud"                              
+    Variable = -nooutput "dummy_ffc"                                                     
+    Variable DOFs = 1                                                                    
+    Exported Variable 1 = "FrontPressure"                                                
+    Exported Variable 1 DOFs = 1                                                         
+                                                                                         
+    Data File = File "loads/forces_Bowdoin_v1/Pressure_t_2.csv"   ! single file, static  
+    Value Column = Integer 4                                                                 
+    Number Of Neighbours = Integer 8                                                                                                
+    IDW Power = Real 2.0
+    Snap Tolerance = Real 1.0e-3
+    Subtract Hydrostatic Pressure = Logical True
+End
+  
+Solver 6
+  Exec Solver = "Never"
+  Equation = "IcebergLoad"
+  Procedure = "BIN/IcebergFrontLoad" "IcebergFrontLoad"
+  Variable = -nooutput "dummy_ibl"
+  Variable DOFs = 1
+  Exported Variable 1 = "IcebergNormalTraction"
+  Exported Variable 1 DOFs = 1
+  Exported Variable 2 = "IcebergForce3"
+  Exported Variable 2 DOFs = 1
+
+  Force File  = File "loads/forces_Bowdoin_v1/Fc.dat"
+  Motion File = File "loads/forces_Bowdoin_v1/Mvt_Frame_body_TopLeftCorner.dat"
+  Motion Z Column = Integer 3
+  Attachment Area Bandwidth = Real 20.0   ! [m] vertical extent of the band
+End
+
+Solver 7
+  Equation = "Linear elasticity"
+  Procedure = "StressSolve" "StressSolver"
+  Variable =  String "t [Disp:3 Pressure:1]"
+  Variable DOFs = 4
+  Steady State Convergence Tolerance = 1.0e-3
+
+  Linear System Solver = "Iterative"
+  Linear System Iterative Method =  "GCR"
+  Linear System GCR Restart = 500
+  Linear System Max Iterations = 10000
+  Linear System Convergence Tolerance = 1.0E-05
+  Linear System Abort Not Converged = False
+  Linear System Preconditioning = "ILU3"
+  Linear System Residual Output = 100
+
+  Nonlinear System Convergence Tolerance = 1.0e-3
+  Nonlinear System Max Iterations = 20
+  Nonlinear System Relaxation Factor = #6.0/7.0
+
+  Element = "p:1 b:1"
+  Incompressible = Logical True
+  Time Derivative Order = 1
+  Maxwell material=Logical True
+  Apply Limiter = Logical True
+  Save Limiter = Logical True
+  Calculate Velocity = Logical True
+  Displace Mesh =  Logical False
+  
+! Create variables required for the optimisation
+  Exported Variable 2 = -dofs 3 "Uobs"
+  Exported Variable 1 = -dofs 1 "Temperature"
+  Exported Variable 3 = -dofs 1 "BC mask"
+  Update Exported Variables = Logical True 
+End
+
+! Dump front (BC 6, Target boundary 7): Disp, FrontPressure, iceberg tractions -> ASCII
+Solver 8
+  Exec Solver = "After Timestep"
+  Equation = "SaveFront"
+  Procedure = "SaveData" "SaveLine"
+  Variable = -nooutput "dummy_sl"
+  Filename = File "$name$_front_values.dat"
+  File Append = Logical True
+  Parallel Reduce = Logical True       ! gather partitions into one file (drop -> one file/rank)
+  Variable 1 = String "Disp"           ! auto-expands to Disp 1, Disp 2, Disp 3
+  Variable 2 = String "FrontPressure"
+  Variable 3 = String "IcebergNormalTraction"
+  Variable 4 = String "IcebergForce3"
+End
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Equations
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+! bulk
+Equation 1
+  Active Solvers(8) = 1 2 3 4 5 6 7 8
+End
+
+! Top
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!! Boundary Conditions
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+Boundary Condition 1
+  Target Boundaries(1) = 4 
+  Name = "back"
+  Disp 1 = Real 0.0
+  Disp 2 = Real 0.0
+  Disp 3 = Real 0.0
+End
+
+Boundary Condition 2
+  Target Boundaries(2) = 1 2
+  Name = "side"
+  Disp 1 = Real 0.0
+  Disp 2 = Real 0.0
+  Disp 3 = Real 0.0
+End
+
+Boundary Condition 3
+  Target Boundaries(1) = 3
+  Name = "groundingline" 
+  Disp 1 = Real 0.0
+  Disp 2 = Real 0.0
+  Disp 3 = Real 0.0
+End
+
+Boundary Condition 4
+  Target Boundaries(1) = 8 
+  Name = "back extruded"
+  Disp 1 = Real 0.0
+  Disp 2 = Real 0.0
+  Normal Force = Equals "Cryostatic Pressure"
+End
+
+Boundary Condition 5
+  Target Boundaries(2) = 5 6
+  Name = "side extruded"
+  Normal Force = Opposes "Cryostatic Pressure"
+  Disp 2 = Real 0.0
+  Disp 3 = Real 0.0
+End
+
+Boundary Condition 6
+  Target Boundaries(1) = 7
+  Name = "calvingfront"
+  Save Line = Logical True            ! picked up by SaveLine (Solver 7)
+  Front Interpolation = Logical True
+  Iceberg Attachment  = Logical True
+  Normal Force = Opposes "Ocean Pressure"
+  BC Mask = Real 1.0
+End
+
+Boundary Condition 7
+  Name = "bed" ! necessary for adjoint!  
+
+  Height = Real 0.0
+
+  Disp 1 = Real 0.0
+  Disp 2 = Real 0.0
+  Disp 3 Lower Limit = Real 0.0
+  Disp 3 Lower Initial = Real 1.0
+
+   Normal Force = Variable Ocean Pressure, t contact active 3, Coordinate 2
+      Real LUA "tx[0]*IfThenElse(tx[1] < 0.0, 0.0, -1.0)*IfThenElse(tx[2] > maxy,0.0,1.0)"
+  Bottom Surface = Equals "zb"
+  BC Mask = Real 2.0
+End
+
+Boundary Condition 8
+  Name = "surface" 
+  Top Surface = Variable "zb", "thickness"
+   Real LUA "tx[0] + tx[1]"
+  BC Mask = Real 3.0 
+End

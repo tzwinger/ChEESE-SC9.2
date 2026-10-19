@@ -1,0 +1,9 @@
+
+  ! triggers extrusion without affecting that division logic.
+  Extruded Mesh Rotational = Logical False
+  ! vertical layers set via res (runresolution_<res>.sif): coarse -> 8 3 ; fine/superfine -> 16 5
+  Extruded Elements(2) = Integer $neLo$ $neUp$
+  ! This line should ensure the sea level falls exactly on a node layer.
+  Extruded Limits(3) = Real 0.0 #rhoi/rhow# 1.0
+  ! This line is like setting "extruded mesh ratio" separately for both parts.
+  Extruded Ratios(2) = Real 0.25 1.0

@@ -1,0 +1,15 @@
+! ---------------------------------------------------------------------------
+! Linear solver for the StressSolver (Solver 5): DIRECT via MUMPS.
+! Robust fallback for the incompressible [Disp:3 Pressure:1] saddle-point --
+! MUMPS pivots through the indefiniteness, so NO Schur / preconditioner is needed
+! and it converges where the iterative block-Schur path (un-exercised in Elmer for
+! incompressible + Maxwell, see BPC_2.sif) does not.
+! NOT weak-scalable: factorisation memory and time grow superlinearly, so this is
+! for correctness / small-to-medium meshes, not the ultrafine scaling point.
+! Included INSIDE Solver 5 -- Linear System keywords only.
+! ---------------------------------------------------------------------------
+  Linear System Solver = Direct
+  Linear System Direct Method = "MUMPS"
+  ! indefinite saddle-point -> extra pivoting fill-in; raise this if MUMPS reports
+  ! insufficient workspace (INFO(1) = -8 / -9).
+  Mumps Percentage Increase Working Space = Integer 100

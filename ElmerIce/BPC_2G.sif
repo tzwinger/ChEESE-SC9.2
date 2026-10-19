@@ -1,0 +1,56 @@
+! ---------------------------------------------------------------------------
+! Linear solver + preconditioner for the StressSolver (Solver 5):
+! 2-BLOCK GENERIC SCHUR -- BlockSolve builds the Schur approximation ITSELF from
+! the assembled submatrices (S = -B * diag(A_disp)^-1 * B^T), so it does NOT need
+! StressSolve's "elast schur" variable (the un-built path that fatals in BPC_2.sif).
+!   block 1 = displacement {Disp1,Disp2,Disp3}
+!   block 2 = pressure, preconditioned by the generated Schur matrix
+! Mechanism: Schur Operator (BlockSolve.F90:4036) -- applies S = A22 - A21 A11^-1 A12 using the
+!   EXISTING parallel block submatrices. NOTE: the alternative "Create Schur Matrix Approximation"
+!   builds a standalone S with NO ParallelInfo (CreateSchurApproximation never sets it), so it
+!   crashes in MPI with "GlobalDOFs bounds error" -- it is SERIAL ONLY and is not used here.
+!
+! CRITICAL: "Block Preconditioner" is intentionally NOT set here.
+!   * BlockSolve defaults it to TRUE (BlockSolve.F90:5069-73) -> outer-Krylov mode
+!     still runs, so we lose nothing.
+!   * NOT setting it stops StressSolve_init from auto-adding
+!     "Block Matrix Schur Variable = elast schur" (StressSolve.F90:341), which is the
+!     keyword that triggers the "Schur variable does not exist" fatal.
+!
+! Un-exercised path -> expect tuning. Included INSIDE Solver 5 (Linear System keywords
+! only). TEST ON A SMALL LOCAL MESH FIRST, not on LUMI.
+! ---------------------------------------------------------------------------
+  Linear System Solver              = "Block"
+  Block Gauss-Seidel                = Logical True
+  Block Structure(4)                = Integer 1 1 1 2     ! NoVar=2: block1=Disp1/2/3, block2=Pressure
+  ! Create Schur Matrix Approximation = Logical True      ! SERIAL ONLY (generated S has no ParallelInfo
+  !                                                       !   -> "GlobalDOFs bounds error" in MPI)
+  Schur Operator 2 = Integer 1                            ! parallel-safe: Schur of block 2 (pressure) via
+                                                          !   block 1 (disp), using existing submatrices
+  ! Schur Multiplier 2 = Real 1.0                         ! optional scaling of the Schur action
+  Block Scaling                     = Logical False
+
+  ! outer Krylov over the Schur-preconditioned operator (expect TENS of iters)
+  Outer: Linear System Solver              = "Iterative"
+  Outer: Linear System Iterative Method    = "GCR"
+  Outer: Linear System GCR Restart         = 100
+  Outer: Linear System Max Iterations      = 500
+  Outer: Linear System Convergence Tolerance = 1.0E-05
+  Outer: Linear System Abort Not Converged = False
+  Outer: Linear System Residual Output     = 1
+
+  $blocktol = 0.001
+  ! block 1 -- displacement (elliptic vector): ILU; swap to hypre BoomerAMG for h-independence
+  block 11: Linear System Solver = "Iterative"
+  block 11: Linear System Iterative Method = "idrs"
+  block 11: Linear System Preconditioning = "ILU1"
+  block 11: Linear System Max Iterations = 500
+  block 11: Linear System Convergence Tolerance = $blocktol
+  block 11: Linear System Residual Output = 0
+  ! block 2 -- pressure, solved against the generated Schur matrix (SPD, well-conditioned)
+  block 22: Linear System Solver = "Iterative"
+  block 22: Linear System Iterative Method = "idrs"
+  block 22: Linear System Preconditioning = "ILU0"
+  block 22: Linear System Max Iterations = 500
+  block 22: Linear System Convergence Tolerance = $blocktol
+  block 22: Linear System Residual Output = 0

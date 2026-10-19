@@ -1,0 +1,15 @@
+ElmerIce/VTU_footprint_*/
+ElmerIce/Output_footprint_*/
+ElmerIce/*.bp/
+ElmerIce/*_front*.dat
+ElmerIce/.sweep_locks/
+ElmerIce/sweep_jobs.txt
+ElmerIce/Logs/*.log
+ElmerIce/Logs/*.out
+ElmerIce/Logs/*.err
+ElmerIce/params_*.sif
+ElmerIce/run_*.sif
+ElmerIce/init_*.sif
+ElmerIce/footprint_bc_*/
+ElmerIce/BIN/*.so
+*~
