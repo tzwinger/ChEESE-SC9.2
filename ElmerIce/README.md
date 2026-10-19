@@ -128,6 +128,7 @@ bash clean_sweep.sh --manifest    # + sweep_jobs.txt
 bash clean_sweep.sh --all         # everything the scripts produced
 RES=fine bash clean_sweep.sh ...  # restrict any of the above to one resolution
 ```
-
+## Geometry data
+The file `bowdoin_v1_geometry_filled.nc` is derived from the DEM used in (van Dongen et al., 2019, doi:10.1017/jog.2019.89). Any further usage of the data should mention this publication. 
 
 
